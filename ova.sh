@@ -15,18 +15,26 @@ FRONTEND_LOG="$OVA_DIR/frontend.log"
 BACKEND_PORT=5173
 FRONTEND_PORT=8000
 
+OVA_PROFILE="${OVA_PROFILE:-default}"
+
 CHAT_MODEL="ministral-3:3b-instruct-2512-q4_K_M"
 HF_MODELS=("hexgrad/Kokoro-82M" "nvidia/parakeet-tdt-0.6b-v3" "Qwen/Qwen3-TTS-12Hz-1.7B-Base")
 
 usage() {
   cat <<'EOF'
-Usage: ova <command>
+Usage: ova [OPTIONS] <command>
+
+Options:
+  OVA_PROFILE=<profile>  Set the profile to use (default: default)
 
 Commands:
   install   Sync uv environment and fetch models
   start     Start backend + frontend server (non-blocking)
   stop      Stop running services
   help      Show this message
+
+Example:
+  OVA_PROFILE=dua ova start
 EOF
 }
 
@@ -293,7 +301,7 @@ case "$cmd" in
       fi
     else
       start_detached "$BACKEND_LOG" "$BACKEND_PID" "$BACKEND_GROUP" \
-        uv run uvicorn main:app --reload --port "$BACKEND_PORT"
+        bash -c "OVA_PROFILE='$OVA_PROFILE' uv run uvicorn ova.api:app --reload --port \"$BACKEND_PORT\""
       wait_for_log_message "Backend" "$BACKEND_LOG" "$BACKEND_PID" \
         "Application startup complete." 60 1 \
         "Back-end started successfully (port $BACKEND_PORT)"
