@@ -31,8 +31,7 @@ When using "profiles" (or voice cloning), there is an additional pre-step where 
 ## Demos
 
 ## Voice assistant with cloned voice TTS
-https://github.com/user-attachments/assets/a56a0ad9-88de-483a-99b1-ba466bfb92ae
-
+https://github.com/user-attachments/assets/9b546ab1-8c71-44f2-85d8-433b3a3d267f
 
 ## Fast voice assistant with default TTS
 https://github.com/user-attachments/assets/a296dbf7-9fa9-4904-bf22-d0cdc1e625a4
