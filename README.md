@@ -26,11 +26,13 @@ How it works:
 
 On my system (RTX5070 12GiB VRAM), the whole round-trip-time using Kokoro is ~1 second.
 
-When using "profiles" (or voice cloning), there is an additional pre-step where a 3-5 second `wav` clip with a corresponding transcription and a prompt, is used for TTS. This leverages Qwen3-TTS and doesn't require any finetuning.
+When using "profiles" (or voice cloning), there is an additional pre-step where a 3-5 second `wav` clip with a corresponding transcription and a prompt, is used for TTS. This leverages Qwen3-TTS and doesn't require any finetuning. Note however that responses will be much slower.
 
 ## Demos
 
 ## Voice assistant with cloned voice TTS
+https://github.com/user-attachments/assets/a56a0ad9-88de-483a-99b1-ba466bfb92ae
+
 
 ## Fast voice assistant with default TTS
 https://github.com/user-attachments/assets/a296dbf7-9fa9-4904-bf22-d0cdc1e625a4
