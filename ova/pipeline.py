@@ -55,6 +55,7 @@ class OVAPipeline:
                 VOICE_CLONE_TTS_MODEL,
                 device_map=self.device,
                 dtype=torch.bfloat16,
+                attn_implementation="flash_attention_2",
             )
 
             with open(f"{profile_dir}/ref_text.txt", "r", encoding="utf-8") as f:
