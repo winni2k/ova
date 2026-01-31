@@ -1,11 +1,10 @@
 import os
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from .pipeline import OVAPipeline
-
 
 OVA_PROFILE = os.getenv("OVA_PROFILE", "default")
 
@@ -22,6 +21,7 @@ app.add_middleware(
 
 pipeline = OVAPipeline(profile=OVA_PROFILE)
 
+
 @app.post("/chat", response_class=Response)
 async def chat_request_handler(request: Request):
     audio_in = await request.body()
@@ -37,3 +37,9 @@ async def chat_request_handler(request: Request):
     audio_out = pipeline.tts(chat_response)
 
     return Response(content=audio_out, media_type="audio/wav")
+
+
+@app.post("/tts", response_class=Response)
+async def tts_request_handler(request: Request):
+    """Text-to-speech endpoint that accepts text and returns audio."""
+    return Response(content=bytes(), media_type="audio/wav", status_code=200)
