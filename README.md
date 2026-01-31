@@ -38,7 +38,7 @@ https://github.com/user-attachments/assets/a296dbf7-9fa9-4904-bf22-d0cdc1e625a4
 
 ## Pre-requisites
 
-- Python >=3.13
+- Python >=3.12
 - `uv` installed and available in PATH
 - Ollama installed and running (`ollama` CLI available)
 - Verified on a system with RTX 5070 (12GiB VRAM); lower-end setups should be possible
