@@ -1,5 +1,6 @@
-import pytest
 import struct
+
+import pytest
 from fastapi.testclient import TestClient
 
 

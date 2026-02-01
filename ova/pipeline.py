@@ -2,12 +2,13 @@ import io
 import wave
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Self
+from typing import Any, Protocol, Self
 
 import nemo.collections.asr as nemo_asr
 import numpy as np
 import torch
 from kokoro import KPipeline
+from nemo.collections.asr.models import ASRModel
 from ollama import chat
 from qwen_tts import Qwen3TTSModel
 
@@ -37,22 +38,29 @@ class OVAProfile(Enum):
             )
         return profile_enum
 
+
+class TTSProtocol(Protocol):
+    def generate(self, text: str) -> bytes: ...
+
+
 @dataclass
 class TTSDefault:
     tts_model: KPipeline
+    _is_warm: bool = False
 
     @classmethod
     def create(cls) -> Self:
         tts_model = KPipeline(
             lang_code="a", repo_id=DEFAULT_TTS_MODEL
         )  # 'a' => US/American English
-
-        # warm up
-        tts_model("Just testing!", voice=DEFAULT_TTS_VOICE)
-
         return cls(tts_model=tts_model)
 
     def generate(self, text: str) -> bytes:
+        if not self._is_warm:
+            # warm up
+            self.tts_model("Just testing!", voice=DEFAULT_TTS_VOICE)
+            self._is_warm = True
+
         generator = self.tts_model(text, voice=DEFAULT_TTS_VOICE)
 
         chunks = []
@@ -105,15 +113,18 @@ class TTSVoiceClone:
         wav_bytes = numpy_to_wav_bytes(wavs[0], sr)
 
         return wav_bytes
+
+
 @dataclass
 class OVAPipeline:
     profile: OVAProfile
     device: Any
     system_prompt: str
     context: list[dict]
-    tts_handler: TTSDefault | TTSVoiceClone
-    asr_model: Any
-    chat_model: str
+    tts_handler: TTSProtocol
+    chat_model: str = DEFAULT_CHAT_MODEL
+    asr_model_name: str = DEFAULT_ASR_MODEL
+    _asr_model: ASRModel | None = None
 
     @classmethod
     def from_profile(cls, profile_enum: OVAProfile) -> Self:
@@ -133,23 +144,19 @@ class OVAPipeline:
         else:
             tts_handler = TTSDefault.create()
 
-        # initialize ASR
-        asr_model = nemo_asr.models.ASRModel.from_pretrained(
-            model_name=DEFAULT_ASR_MODEL
-        )
-
-        # initialize chat model
-        chat_model = DEFAULT_CHAT_MODEL
-
         return cls(
             profile=profile_enum,
             device=device,
             system_prompt=system_prompt,
             context=context,
             tts_handler=tts_handler,
-            asr_model=asr_model,
-            chat_model=chat_model,
         )
+
+    @property
+    def asr_model(self) -> ASRModel:
+        if self._asr_model is None:
+            self._asr_model = ASRModel.from_pretrained(model_name=self.asr_model_name)
+        return self._asr_model
 
     def tts(self, text: str) -> bytes:
         return self.tts_handler.generate(text)
