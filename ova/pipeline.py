@@ -1,17 +1,18 @@
-from enum import Enum
 import io
 import wave
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Callable, Self
 
-from kokoro import KPipeline
 import nemo.collections.asr as nemo_asr
 import numpy as np
+import torch
+from kokoro import KPipeline
 from ollama import chat
 from qwen_tts import Qwen3TTSModel
-import torch
 
 from .audio import numpy_to_wav_bytes, resample
 from .utils import get_device, logger
-
 
 DEFAULT_SR = 24000  # default sample rate
 DEFAULT_TTS_MODEL = "hexgrad/Kokoro-82M"
@@ -21,39 +22,57 @@ DEFAULT_CHAT_MODEL = "ministral-3:3b-instruct-2512-q4_K_M"
 DEFAULT_ASR_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 
 
-class OVAProfile(str, Enum):
+class OVAProfile(Enum):
     DEFAULT = "default"
     DUA = "dua"
 
+    @classmethod
+    def from_str(cls, profile_str: str) -> Self:
+        profile_enum = cls.DEFAULT
+        if profile_str in [p.value for p in OVAProfile]:
+            profile_enum = cls(profile_str)
+        else:
+            logger.warning(
+                f"Unknown OVA profile '{profile_str}', defaulting to DEFAULT"
+            )
+        return profile_enum
 
+
+@dataclass
 class OVAPipeline:
-    def __init__(self, profile: OVAProfile | str):
-        try:
-            self.profile = OVAProfile(profile)
-        except ValueError:
-            logger.warning(f"Unknown OVA profile '{profile}', defaulting to DEFAULT")
-            self.profile = OVAProfile.DEFAULT
+    profile: OVAProfile
+    device: Any
+    system_prompt: str
+    context: list[dict]
+    tts_model: KPipeline | Qwen3TTSModel
+    asr_model: Any
+    chat_model: str
+    voice_clone_prompt_items: Any = None
+    tts: Callable[[str], bytes] = field(init=False)
 
-        self.tts = {
-            OVAProfile.DEFAULT: self._tts,
-            OVAProfile.DUA: self._tts_with_voice_clone,
-        }[self.profile]
-
-        self.device = get_device()
+    @classmethod
+    def from_profile(cls, profile_enum: OVAProfile) -> Self:
+        device = get_device()
 
         # prep for loading assistant profile / prompt
-        profile_dir = f"profiles/{self.profile.value}"
+        profile_dir = f"profiles/{profile_enum.value}"
 
         with open(f"{profile_dir}/prompt.txt", "r", encoding="utf-8") as f:
-            self.system_prompt = f.read().strip()
+            system_prompt = f.read().strip()
 
-        self.context = [{"role": "system", "content": self.system_prompt}]
+        context = [{"role": "system", "content": system_prompt}]
 
         # initialize TTS
-        if self.tts.__name__ == "_tts_with_voice_clone":  # voice cloning
-            self.tts_model = Qwen3TTSModel.from_pretrained(
+        tts_method_name = {
+            OVAProfile.DEFAULT: "_tts",
+            OVAProfile.DUA: "_tts_with_voice_clone",
+        }[profile_enum]
+
+        voice_clone_prompt_items = None
+        if tts_method_name == "_tts_with_voice_clone":  # voice cloning
+            tts_model = Qwen3TTSModel.from_pretrained(
                 VOICE_CLONE_TTS_MODEL,
-                device_map=self.device,
+                device_map=device,
                 dtype=torch.bfloat16,
                 attn_implementation="flash_attention_2",
             )
@@ -61,26 +80,46 @@ class OVAPipeline:
             with open(f"{profile_dir}/ref_text.txt", "r", encoding="utf-8") as f:
                 ref_text = f.read().strip()
 
-            self.voice_clone_prompt_items = self.tts_model.create_voice_clone_prompt(
+            voice_clone_prompt_items = tts_model.create_voice_clone_prompt(
                 ref_audio=f"{profile_dir}/ref_audio.wav",
                 ref_text=ref_text,
                 x_vector_only_mode=False,
             )
         else:  # default / super-fast TTS
-            self.tts_model = KPipeline(
+            tts_model = KPipeline(
                 lang_code="a", repo_id=DEFAULT_TTS_MODEL
             )  # 'a' => US/American English
 
             # warm up
-            self.tts_model("Just testing!", voice=DEFAULT_TTS_VOICE)
+            tts_model("Just testing!", voice=DEFAULT_TTS_VOICE)
 
         # initialize ASR
-        self.asr_model = nemo_asr.models.ASRModel.from_pretrained(
+        asr_model = nemo_asr.models.ASRModel.from_pretrained(
             model_name=DEFAULT_ASR_MODEL
         )
 
         # initialize chat model
-        self.chat_model = DEFAULT_CHAT_MODEL
+        chat_model = DEFAULT_CHAT_MODEL
+
+        # Create instance
+        instance = cls(
+            profile=profile_enum,
+            device=device,
+            system_prompt=system_prompt,
+            context=context,
+            tts_model=tts_model,
+            asr_model=asr_model,
+            chat_model=chat_model,
+            voice_clone_prompt_items=voice_clone_prompt_items,
+        )
+
+        # Set the tts method based on profile
+        instance.tts = {
+            OVAProfile.DEFAULT: instance._tts,
+            OVAProfile.DUA: instance._tts_with_voice_clone,
+        }[profile_enum]
+
+        return instance
 
     def _tts(self, text: str) -> bytes:
         generator = self.tts_model(text, voice=DEFAULT_TTS_VOICE)
